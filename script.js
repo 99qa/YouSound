@@ -8,6 +8,7 @@ let duration = 0;
 let progressInterval;
 let urlHistory = [];
 let keepAliveInterval;
+let heartbeatInterval;
 
 // ローカルストレージから履歴を読み込み
 function loadHistory() {
@@ -228,8 +229,8 @@ function onPlayerReady(event) {
   // プログレス更新を開始
   progressInterval = setInterval(updateProgress, 1000);
   
-  // キープアライブを開始（自動リセット防止）
-  startKeepAlive();
+  // 強力なキープアライブを開始
+  startStrongKeepAlive();
 }
 
 // プレーヤーの状態変更時
@@ -242,39 +243,62 @@ function onPlayerStateChange(event) {
     if (!progressInterval) {
       progressInterval = setInterval(updateProgress, 1000);
     }
-    startKeepAlive();
+    startStrongKeepAlive();
   } else {
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
     }
     if (event.data === YT.PlayerState.PAUSED) {
-      stopKeepAlive();
+      stopStrongKeepAlive();
     }
   }
 }
 
-// キープアライブ機能（自動リセット防止）
-function startKeepAlive() {
-  stopKeepAlive(); // 既存のインターバルをクリア
+// 強力なキープアライブ機能（リセット完全防止）
+function startStrongKeepAlive() {
+  stopStrongKeepAlive(); // 既存のインターバルをクリア
   
+  // 複数の方法でプレーヤーをアクティブに保つ
   keepAliveInterval = setInterval(() => {
     if (player && isPlaying) {
       try {
-        // 現在の音量を取得して再設定（軽い操作でプレーヤーをアクティブに保つ）
+        // 方法1: 音量の微調整
         const currentVolume = player.getVolume();
         player.setVolume(currentVolume);
+        
+        // 方法2: プレーヤー状態の確認
+        player.getPlayerState();
+        
+        // 方法3: 現在時間の取得
+        player.getCurrentTime();
       } catch (err) {
         console.log('Keep alive failed:', err);
       }
     }
-  }, 30000); // 30秒ごと
+  }, 15000); // 15秒ごと
+  
+  // ハートビート機能（より頻繁な軽い操作）
+  heartbeatInterval = setInterval(() => {
+    if (player && isPlaying) {
+      try {
+        // 非常に軽い操作でプレーヤーをアクティブに保つ
+        player.getPlaylist();
+      } catch (err) {
+        // エラーは無視
+      }
+    }
+  }, 5000); // 5秒ごと
 }
 
-function stopKeepAlive() {
+function stopStrongKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
     keepAliveInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
   }
 }
 
@@ -663,5 +687,15 @@ window.addEventListener('beforeunload', () => {
   if (progressInterval) {
     clearInterval(progressInterval);
   }
-  stopKeepAlive();
+  stopStrongKeepAlive();
+});
+
+// ページの可視性変更時の処理（タブ切り替え対応）
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // タブが非アクティブになった時も強力なキープアライブを継続
+    if (isPlaying) {
+      startStrongKeepAlive();
+    }
+  }
 });
